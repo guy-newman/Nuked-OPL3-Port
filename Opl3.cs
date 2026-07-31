@@ -20,6 +20,7 @@
 //    USA
 
 using System;
+using System.Threading;
 
 namespace Nuked_OPL3_Port
 {
@@ -135,6 +136,9 @@ namespace Nuked_OPL3_Port
         static int [] panpot_lut = new int[256];
         static bool panpot_lut_build = false;
 #endif
+
+        static int[] generate4ChMix = new int[2];
+        static short[] generateSamples = new short[4];
 
         static short OPL3_EnvelopeCalcExp(uint level)
         {
@@ -1005,8 +1009,6 @@ namespace Nuked_OPL3_Port
 
         public static void OPL3_Generate4Ch(Opl3_Chip chip, Span<short> buf4)
         {
-            var mix = new int[2];
-
             buf4[1] = OPL3_ClipSample(chip.mixbuff[1]);
             buf4[3] = OPL3_ClipSample(chip.mixbuff[3]);
 
@@ -1019,8 +1021,8 @@ namespace Nuked_OPL3_Port
                 OPL3_ProcessSlot(chip.slot[ii]);
             }
 
-            mix[0] = 0;
-            mix[1] = 0;
+            generate4ChMix[0] = 0;
+            generate4ChMix[1] = 0;
 
             for (var ii = 0; ii < 18; ii++)
             {
@@ -1028,14 +1030,14 @@ namespace Nuked_OPL3_Port
                 var out_renamed = channel.out_renamed;
                 var accm = (short)(out_renamed[0]() + out_renamed[1]() + out_renamed[2]() + out_renamed[3]());
 #if OPL_ENABLE_STEREOEXT
-                mix[0] += (short)((accm * channel.leftpan) >> 16);
+                generate4ChMix[0] += (short)((accm * channel.leftpan) >> 16);
 #else
-                mix[0] += (short)(accm & channel.cha);
+                generate4ChMix[0] += (short)(accm & channel.cha);
 #endif
-                mix[1] += (short)(accm & channel.chc);
+                generate4ChMix[1] += (short)(accm & channel.chc);
             }
-            chip.mixbuff[0] = mix[0];
-            chip.mixbuff[2] = mix[1];
+            chip.mixbuff[0] = generate4ChMix[0];
+            chip.mixbuff[2] = generate4ChMix[1];
 
 #if OPL_QUIRK_CHANNELSAMPLEDELAY
             for (var ii = 15; ii < 18; ii++)
@@ -1054,21 +1056,21 @@ namespace Nuked_OPL3_Port
             }
 #endif
 
-            mix[0] = mix[1] = 0;
+            generate4ChMix[0] = generate4ChMix[1] = 0;
             for (var ii = 0; ii < 18; ii++)
             {
                 var channel = chip.channel[ii];
                 var out_renamed = channel.out_renamed;
                 var accm = (short)(out_renamed[0]() + out_renamed[1]() + out_renamed[2]() + out_renamed[3]());
 #if OPL_ENABLE_STEREOEXT
-                mix[0] += (short)((accm * channel.rightpan) >> 16);
+                generate4ChMix[0] += (short)((accm * channel.rightpan) >> 16);
 #else
-                mix[0] += (short)(accm & channel.chb);
+                generate4ChMix[0] += (short)(accm & channel.chb);
 #endif
-                mix[1] += (short)(accm & channel.chd);
+                generate4ChMix[1] += (short)(accm & channel.chd);
             }
-            chip.mixbuff[1] = mix[0];
-            chip.mixbuff[3] = mix[1];
+            chip.mixbuff[1] = generate4ChMix[0];
+            chip.mixbuff[3] = generate4ChMix[1];
 
 #if OPL_QUIRK_CHANNELSAMPLEDELAY
             for (var ii = 33; ii < 36; ii++)
@@ -1152,10 +1154,9 @@ namespace Nuked_OPL3_Port
 
         public static void OPL3_Generate(Opl3_Chip chip, Span<short> buf)
         {
-            var samples = new short[4];
-            OPL3_Generate4Ch(chip, samples);
-            buf[0] = samples[0];
-            buf[1] = samples[1];
+            OPL3_Generate4Ch(chip, generateSamples);
+            buf[0] = generateSamples[0];
+            buf[1] = generateSamples[1];
         }
 
         public static void OPL3_Generate4ChResampled(Opl3_Chip chip, Span<short> buf4)
@@ -1182,10 +1183,9 @@ namespace Nuked_OPL3_Port
 
         public static void OPL3_GenerateResampled(Opl3_Chip chip, Span<short> buf)
         {
-            var samples = new short[4];
-            OPL3_Generate4ChResampled(chip, samples);
-            buf[0] = samples[0];
-            buf[1] = samples[1];
+            OPL3_Generate4ChResampled(chip, generateSamples);
+            buf[0] = generateSamples[0];
+            buf[1] = generateSamples[1];
         }
 
         public static void OPL3_Reset(Opl3_Chip chip, uint samplerate)
@@ -1373,18 +1373,16 @@ namespace Nuked_OPL3_Port
 
         public static void OPL3_Generate4ChStream(Opl3_Chip chip, Span<short> sndptr1, Span<short> sndptr2, uint numsamples)
         {
-            var samples = new short[4];
-
             for (var i = 0; i < numsamples; i++)
             {
                 var slice1 = sndptr1.Slice(2 * i, 2);
                 var slice2 = sndptr2.Slice(2 * i, 2);
-                OPL3_Generate4ChResampled(chip, samples);
+                OPL3_Generate4ChResampled(chip, generateSamples);
 
-                slice1[0] = samples[0];
-                slice1[1] = samples[1];
-                slice2[0] = samples[2];
-                slice2[1] = samples[3];
+                slice1[0] = generateSamples[0];
+                slice1[1] = generateSamples[1];
+                slice2[0] = generateSamples[2];
+                slice2[1] = generateSamples[3];
             }
         }
 
