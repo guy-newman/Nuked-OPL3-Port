@@ -136,10 +136,6 @@ namespace Nuked_OPL3_Port
         static int [] panpot_lut = new int[256];
         static bool panpot_lut_build = false;
 #endif
-
-        static int[] generate4ChMix = new int[2];
-        static short[] generateSamples = new short[4];
-
         static short OPL3_EnvelopeCalcExp(uint level)
         {
             if (level > 0x1fff)
@@ -388,7 +384,7 @@ namespace Nuked_OPL3_Port
             }
             var eg_rout = slot.eg_rout;
             short eg_inc = 0;
-            byte eg_off = 0;
+            bool eg_off = false;
             /* Instant attack */
             if (reset && rate_hi == 0x0f)
             {
@@ -397,9 +393,9 @@ namespace Nuked_OPL3_Port
             /* Envelope off */
             if ((slot.eg_rout & 0x1f8) == 0x1f8)
             {
-                eg_off = 1;
+                eg_off = true;
             }
-            if (slot.eg_gen != EnvelopeGenNum.Attack && !reset && eg_off != 0)
+            if (slot.eg_gen != EnvelopeGenNum.Attack && !reset && eg_off)
             {
                 eg_rout = 0x1ff;
             }
@@ -420,14 +416,14 @@ namespace Nuked_OPL3_Port
                     {
                         slot.eg_gen = EnvelopeGenNum.Sustain;
                     }
-                    else if (eg_off == 0 && !reset && shift > 0)
+                    else if (!eg_off && !reset && shift > 0)
                     {
                         eg_inc = (short)(1 << (shift - 1));
                     }
                     break;
                 case EnvelopeGenNum.Sustain:
                 case EnvelopeGenNum.Release:
-                    if (eg_off == 0 && !reset && shift > 0)
+                    if (!eg_off && !reset && shift > 0)
                     {
                         eg_inc = (short)(1 << (shift - 1));
                     }
@@ -1021,8 +1017,8 @@ namespace Nuked_OPL3_Port
                 OPL3_ProcessSlot(chip.slot[ii]);
             }
 
-            generate4ChMix[0] = 0;
-            generate4ChMix[1] = 0;
+            chip.generate4ChMix[0] = 0;
+            chip.generate4ChMix[1] = 0;
 
             for (var ii = 0; ii < 18; ii++)
             {
@@ -1030,14 +1026,14 @@ namespace Nuked_OPL3_Port
                 var out_renamed = channel.out_renamed;
                 var accm = (short)(out_renamed[0]() + out_renamed[1]() + out_renamed[2]() + out_renamed[3]());
 #if OPL_ENABLE_STEREOEXT
-                generate4ChMix[0] += (short)((accm * channel.leftpan) >> 16);
+                chip.generate4ChMix[0] += (short)((accm * channel.leftpan) >> 16);
 #else
-                generate4ChMix[0] += (short)(accm & channel.cha);
+                chip.generate4ChMix[0] += (short)(accm & channel.cha);
 #endif
-                generate4ChMix[1] += (short)(accm & channel.chc);
+                chip.generate4ChMix[1] += (short)(accm & channel.chc);
             }
-            chip.mixbuff[0] = generate4ChMix[0];
-            chip.mixbuff[2] = generate4ChMix[1];
+            chip.mixbuff[0] = chip.generate4ChMix[0];
+            chip.mixbuff[2] = chip.generate4ChMix[1];
 
 #if OPL_QUIRK_CHANNELSAMPLEDELAY
             for (var ii = 15; ii < 18; ii++)
@@ -1056,21 +1052,21 @@ namespace Nuked_OPL3_Port
             }
 #endif
 
-            generate4ChMix[0] = generate4ChMix[1] = 0;
+            chip.generate4ChMix[0] = chip.generate4ChMix[1] = 0;
             for (var ii = 0; ii < 18; ii++)
             {
                 var channel = chip.channel[ii];
                 var out_renamed = channel.out_renamed;
                 var accm = (short)(out_renamed[0]() + out_renamed[1]() + out_renamed[2]() + out_renamed[3]());
 #if OPL_ENABLE_STEREOEXT
-                generate4ChMix[0] += (short)((accm * channel.rightpan) >> 16);
+                chip.generate4ChMix[0] += (short)((accm * channel.rightpan) >> 16);
 #else
-                generate4ChMix[0] += (short)(accm & channel.chb);
+                chip.generate4ChMix[0] += (short)(accm & channel.chb);
 #endif
-                generate4ChMix[1] += (short)(accm & channel.chd);
+                chip.generate4ChMix[1] += (short)(accm & channel.chd);
             }
-            chip.mixbuff[1] = generate4ChMix[0];
-            chip.mixbuff[3] = generate4ChMix[1];
+            chip.mixbuff[1] = chip.generate4ChMix[0];
+            chip.mixbuff[3] = chip.generate4ChMix[1];
 
 #if OPL_QUIRK_CHANNELSAMPLEDELAY
             for (var ii = 33; ii < 36; ii++)
@@ -1154,9 +1150,9 @@ namespace Nuked_OPL3_Port
 
         public static void OPL3_Generate(Opl3_Chip chip, Span<short> buf)
         {
-            OPL3_Generate4Ch(chip, generateSamples);
-            buf[0] = generateSamples[0];
-            buf[1] = generateSamples[1];
+            OPL3_Generate4Ch(chip, chip.generateSamples);
+            buf[0] = chip.generateSamples[0];
+            buf[1] = chip.generateSamples[1];
         }
 
         public static void OPL3_Generate4ChResampled(Opl3_Chip chip, Span<short> buf4)
@@ -1183,9 +1179,9 @@ namespace Nuked_OPL3_Port
 
         public static void OPL3_GenerateResampled(Opl3_Chip chip, Span<short> buf)
         {
-            OPL3_Generate4ChResampled(chip, generateSamples);
-            buf[0] = generateSamples[0];
-            buf[1] = generateSamples[1];
+            OPL3_Generate4ChResampled(chip, chip.generateSamples);
+            buf[0] = chip.generateSamples[0];
+            buf[1] = chip.generateSamples[1];
         }
 
         public static void OPL3_Reset(Opl3_Chip chip, uint samplerate)
@@ -1377,12 +1373,12 @@ namespace Nuked_OPL3_Port
             {
                 var slice1 = sndptr1.Slice(2 * i, 2);
                 var slice2 = sndptr2.Slice(2 * i, 2);
-                OPL3_Generate4ChResampled(chip, generateSamples);
+                OPL3_Generate4ChResampled(chip, chip.generateSamples);
 
-                slice1[0] = generateSamples[0];
-                slice1[1] = generateSamples[1];
-                slice2[0] = generateSamples[2];
-                slice2[1] = generateSamples[3];
+                slice1[0] = chip.generateSamples[0];
+                slice1[1] = chip.generateSamples[1];
+                slice2[0] = chip.generateSamples[2];
+                slice2[1] = chip.generateSamples[3];
             }
         }
 

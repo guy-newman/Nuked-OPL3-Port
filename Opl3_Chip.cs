@@ -135,5 +135,8 @@ namespace Nuked_OPL3_Port
         internal byte TremeloFunc() => tremolo;
         internal byte ZeroModByteFunc() => (byte)zeromod;
         internal short ZeroModShortFunc() => zeromod;
+
+        internal int[] generate4ChMix = new int[2];
+        internal short[] generateSamples = new short[4];
     }
 }
